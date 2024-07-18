@@ -1,0 +1,63 @@
+#ansible-playbook -i invfile Playbooks/vault_testing.yml -vv --ask-vault-pass
+---
+  - name: Run AWS Cli Commands On All Servers
+    hosts: all:!controller
+    gather_facts: yes
+    become: yes
+    become_user: root
+    serial: 1
+    vars:
+     user_password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          65383538626135356539316430396335333735336431613230646563356337353961316665343236
+          6436373165333036666138633932643766323438353436610a633635303066313933666431626634
+          65383836633333396233663962623335393234636262653137303737306265343638646466653963
+          6364393832636430630a386565373161333436303865363037353436333039643936326262666432
+          6535
+    tasks:
+       - name: Create .aws folder
+         shell: mkdir -p /root/.aws
+         ignore_errors: yes
+       - name: Copy Encrypted File To /tmp
+         copy:
+           src: /tmp/aws_creds #This Encrypted File Must Be Created Prior To Running The Playbook.
+           dest: /tmp/aws_creds
+           owner: root
+           group: root
+           mode: '0600'
+       - name: Copy Encrypted File To .aws folder
+         copy:
+           src: /tmp/aws_creds #This Encrypted File Must Be Created Prior To Running The Playbook.
+           dest: /root/.aws/credentials
+           owner: root
+           group: root
+           mode: '0600'
+       - name: Check S3 Buckets
+         shell: aws s3 ls | cut -d " " -f 3
+         register: buckets
+       - name: Creating admin "{{item}}"
+         user:
+           name: "{{item}}"
+           state: present
+           comment: Admin User "{{item}}"
+           groups: root
+           shell: /bin/bash
+           group: root
+           password: "{{ '%s' | format(user_password) | regex_replace('\n', '') | password_hash('sha512') }}"
+           password_expire_min: 1
+         with_items:
+         - anand
+         - bala
+         - chandra
+         - david
+       - name: Replace Password Authentication To Yes
+         ansible.builtin.lineinfile:
+           path: /etc/ssh/sshd_config
+           regexp: '^PasswordAuthentication no'
+           line: PasswordAuthentication yes
+           backup: yes
+         notify:
+         -  Restart SSH Service
+    handlers:
+      - name: Restart SSH Service
+        shell: service sshd restart

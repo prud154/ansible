@@ -1,0 +1,68 @@
+---
+- name: Play For Installing Nginx On Webservers & Appservers
+  hosts: webservers:appservers:dbservers
+  become: yes
+  become_user: root
+  gather_facts: yes
+  tasks:
+  - name: Perform apt update
+    when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+    shell: apt update
+  - name: Install Nginx
+    when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+    shell: apt install -y nginx
+  - name: Start Nginx Service
+    when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+    shell: service nginx start
+  tags:
+  - nginx
+
+- name: Installing Multiple Packages on DbServers
+  hosts: dbservers
+  become: yes
+  become_user: root
+  gather_facts: yes
+  tasks:
+  - name: Perform apt update
+    when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+    shell: apt update
+  - name: Install Stress, net-tools, unzip
+    when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+    apt:
+      name: "{{ item }}"
+      state: latest
+    with_items:
+    - stress
+    - net-tools
+    - unzip
+  tags:
+  - tools
+
+- name: Copy Files To All
+  hosts: all:!controller
+  become: yes
+  become_user: root
+  gather_facts: yes
+  tasks:
+  - name: Remove Default Nginx File
+    when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+    shell: rm -rf /var/www/html/index.nginx-debian.html
+  - name: Copy WebServer Files
+    when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+    ansible.builtin.copy:
+      src: "{{ item }}"
+      dest: /var/www/html/{{ item }}
+      owner: root
+      group: root
+      mode: '0644'
+    with_items:
+    - index.html
+    - scorekeeper.js
+    - style.css
+    notify: restart_nginx
+  handlers:
+  - name: restart_nginx
+    when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+    shell: service nginx start
+  tags:
+  - files
